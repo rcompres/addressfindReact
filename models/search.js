@@ -9,10 +9,6 @@ var SearchSchema = new Scheme({
     type: Date,
     default: Date.now
   },
-  searchID: {
-    type: Number
-
-  }
 });
 
 var Search = mongoose.model('Search', SearchSchema);
