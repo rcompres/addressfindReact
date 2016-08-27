@@ -213,13 +213,74 @@
 /***/ function(module, exports) {
 
 	// shim for using process in browser
-
 	var process = module.exports = {};
 
-	// cached from whatever global is present so that test runners that stub it don't break things.
-	var cachedSetTimeout = setTimeout;
-	var cachedClearTimeout = clearTimeout;
+	// cached from whatever global is present so that test runners that stub it
+	// don't break things.  But we need to wrap it in a try catch in case it is
+	// wrapped in strict mode code which doesn't define any globals.  It's inside a
+	// function because try/catches deoptimize in certain engines.
 
+	var cachedSetTimeout;
+	var cachedClearTimeout;
+
+	(function () {
+	    try {
+	        cachedSetTimeout = setTimeout;
+	    } catch (e) {
+	        cachedSetTimeout = function () {
+	            throw new Error('setTimeout is not defined');
+	        }
+	    }
+	    try {
+	        cachedClearTimeout = clearTimeout;
+	    } catch (e) {
+	        cachedClearTimeout = function () {
+	            throw new Error('clearTimeout is not defined');
+	        }
+	    }
+	} ())
+	function runTimeout(fun) {
+	    if (cachedSetTimeout === setTimeout) {
+	        //normal enviroments in sane situations
+	        return setTimeout(fun, 0);
+	    }
+	    try {
+	        // when when somebody has screwed with setTimeout but no I.E. maddness
+	        return cachedSetTimeout(fun, 0);
+	    } catch(e){
+	        try {
+	            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+	            return cachedSetTimeout.call(null, fun, 0);
+	        } catch(e){
+	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+	            return cachedSetTimeout.call(this, fun, 0);
+	        }
+	    }
+
+
+	}
+	function runClearTimeout(marker) {
+	    if (cachedClearTimeout === clearTimeout) {
+	        //normal enviroments in sane situations
+	        return clearTimeout(marker);
+	    }
+	    try {
+	        // when when somebody has screwed with setTimeout but no I.E. maddness
+	        return cachedClearTimeout(marker);
+	    } catch (e){
+	        try {
+	            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+	            return cachedClearTimeout.call(null, marker);
+	        } catch (e){
+	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+	            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+	            return cachedClearTimeout.call(this, marker);
+	        }
+	    }
+
+
+
+	}
 	var queue = [];
 	var draining = false;
 	var currentQueue;
@@ -244,7 +305,7 @@
 	    if (draining) {
 	        return;
 	    }
-	    var timeout = cachedSetTimeout(cleanUpNextTick);
+	    var timeout = runTimeout(cleanUpNextTick);
 	    draining = true;
 
 	    var len = queue.length;
@@ -261,7 +322,7 @@
 	    }
 	    currentQueue = null;
 	    draining = false;
-	    cachedClearTimeout(timeout);
+	    runClearTimeout(timeout);
 	}
 
 	process.nextTick = function (fun) {
@@ -273,7 +334,7 @@
 	    }
 	    queue.push(new Item(fun, args));
 	    if (queue.length === 1 && !draining) {
-	        cachedSetTimeout(drainQueue, 0);
+	        runTimeout(drainQueue);
 	    }
 	};
 
@@ -19675,17 +19736,18 @@
 
 	'use strict';
 
-	// Include React
+	// Include React 
 	var React = __webpack_require__(1);
 
 	// Here we include all of the sub-components
 	var Form = __webpack_require__(160);
 	var Results = __webpack_require__(161);
+	var History = __webpack_require__(162);
 
 	// Helper Function
-	var helpers = __webpack_require__(162);
+	var helpers = __webpack_require__(163);
 
-	// This is the main component.
+	// This is the main component. 
 	var Main = React.createClass({
 		displayName: 'Main',
 
@@ -19698,13 +19760,14 @@
 			};
 		},
 
+		// We use this function to allow children to update the parent with searchTerms.
 		setTerm: function setTerm(term) {
 			this.setState({
 				searchTerm: term
 			});
 		},
 
-		// If the
+		// If the component updates we'll run this code
 		componentDidUpdate: function componentDidUpdate(prevProps, prevState) {
 
 			if (prevState.searchTerm != this.state.searchTerm) {
@@ -19720,7 +19783,7 @@
 						});
 					}
 
-					// This code is necessary to bind the keyword "this" when we say this.setState
+					// This code is necessary to bind the keyword "this" when we say this.setState 
 					// to actually mean the component itself and not the runQuery function.
 				}.bind(this));
 			}
@@ -19763,6 +19826,15 @@
 						{ className: 'col-md-6' },
 						React.createElement(Results, { address: this.state.results })
 					)
+				),
+				React.createElement(
+					'div',
+					{ className: 'row' },
+					React.createElement(
+						'div',
+						{ className: 'col-md-8' },
+						React.createElement(History, { searchHistory: this.state.searchHistory })
+					)
 				)
 			);
 		}
@@ -19777,10 +19849,10 @@
 
 	"use strict";
 
-	// Include React
+	// Include React 
 	var React = __webpack_require__(1);
 
-	// This is the main component. It includes the banner and form element.
+	// Component creation
 	var Form = React.createClass({
 		displayName: "Form",
 
@@ -19792,22 +19864,23 @@
 			};
 		},
 
-		// This function will respond to the user input
+		// This function will respond to the user input 
 		handleChange: function handleChange(event) {
 
 			// Here we create syntax to capture any change in text to the query terms (pre-search).
-			// See this Stack Overflow answer for more details:
+			// See this Stack Overflow answer for more details: 
 			// http://stackoverflow.com/questions/21029999/react-js-identifying-different-inputs-with-one-onchange-handler
 			var newState = {};
 			newState[event.target.id] = event.target.value;
 			this.setState(newState);
 		},
 
-		// When a user submits...
+		// When a user submits... 
 		handleClick: function handleClick() {
 
 			console.log("CLICK");
 			console.log(this.state.term);
+
 			// Set the parent to have the search term
 			this.props.setTerm(this.state.term);
 		},
@@ -19859,7 +19932,7 @@
 		}
 	});
 
-	// Export the componen back for use in other files
+	// Export the component back for use in other files
 	module.exports = Form;
 
 /***/ },
@@ -19868,10 +19941,10 @@
 
 	"use strict";
 
-	// Include React
+	// Include React 
 	var React = __webpack_require__(1);
 
-	// This is the main component. It includes the banner and Results element.
+	// Component creation
 	var Results = React.createClass({
 		displayName: "Results",
 
@@ -19909,7 +19982,7 @@
 		}
 	});
 
-	// Export the componen back for use in other files
+	// Export the component back for use in other files
 	module.exports = Results;
 
 /***/ },
@@ -19918,8 +19991,58 @@
 
 	"use strict";
 
+	// Include React 
+	var React = __webpack_require__(1);
+
+	// Component creation
+	var History = React.createClass({
+		displayName: "History",
+
+
+		// Here we render the function
+		render: function render() {
+
+			return React.createElement(
+				"div",
+				{ className: "panel panel-default" },
+				React.createElement(
+					"div",
+					{ className: "panel-heading" },
+					React.createElement(
+						"h3",
+						{ className: "panel-title text-center" },
+						"Previously Searched"
+					)
+				),
+				React.createElement(
+					"div",
+					{ className: "panel-body text-center" },
+					React.createElement(
+						"h1",
+						null,
+						"Searched:"
+					),
+					React.createElement(
+						"p",
+						null,
+						this.props.searchHistory
+					)
+				)
+			);
+		}
+	});
+
+	// Export the component back for use in other files
+	module.exports = History;
+
+/***/ },
+/* 163 */
+/***/ function(module, exports, __webpack_require__) {
+
+	"use strict";
+
 	// Include the axios package for performing HTTP requests (promise based alternative to request)
-	var axios = __webpack_require__(163);
+	var axios = __webpack_require__(164);
 
 	// Geocoder API
 	var geocodeAPI = "35e5548c618555b1a43eb4759d26b260";
@@ -19927,19 +20050,19 @@
 	// Helper Functions (in this case the only one is runQuery)
 	var helpers = {
 
-			runQuery: function runQuery(location) {
+		runQuery: function runQuery(location) {
 
-					console.log(location);
+			console.log(location);
 
-					//Figure out the geolocation
-					var queryURL = "http://api.opencagedata.com/geocode/v1/json?query=" + location + "&pretty=1&key=" + geocodeAPI;
+			//Figure out the geolocation
+			var queryURL = "http://api.opencagedata.com/geocode/v1/json?query=" + location + "&pretty=1&key=" + geocodeAPI;
 
-					return axios.get(queryURL).then(function (response) {
+			return axios.get(queryURL).then(function (response) {
 
-							console.log(response);
-							return response.data.results[0].formatted;
-					});
-			}
+				console.log(response);
+				return response.data.results[0].formatted;
+			});
+		}
 
 	};
 
@@ -19947,25 +20070,25 @@
 	module.exports = helpers;
 
 /***/ },
-/* 163 */
+/* 164 */
 /***/ function(module, exports, __webpack_require__) {
 
-	module.exports = __webpack_require__(164);
+	module.exports = __webpack_require__(165);
 
 /***/ },
-/* 164 */
+/* 165 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var defaults = __webpack_require__(165);
-	var utils = __webpack_require__(166);
-	var dispatchRequest = __webpack_require__(168);
-	var InterceptorManager = __webpack_require__(177);
-	var isAbsoluteURL = __webpack_require__(178);
-	var combineURLs = __webpack_require__(179);
-	var bind = __webpack_require__(180);
-	var transformData = __webpack_require__(172);
+	var defaults = __webpack_require__(166);
+	var utils = __webpack_require__(167);
+	var dispatchRequest = __webpack_require__(169);
+	var InterceptorManager = __webpack_require__(178);
+	var isAbsoluteURL = __webpack_require__(179);
+	var combineURLs = __webpack_require__(180);
+	var bind = __webpack_require__(181);
+	var transformData = __webpack_require__(173);
 
 	function Axios(defaultConfig) {
 	  this.defaults = utils.merge({}, defaultConfig);
@@ -20054,7 +20177,7 @@
 	axios.all = function all(promises) {
 	  return Promise.all(promises);
 	};
-	axios.spread = __webpack_require__(181);
+	axios.spread = __webpack_require__(182);
 
 	// Provide aliases for supported request methods
 	utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
@@ -20082,13 +20205,13 @@
 
 
 /***/ },
-/* 165 */
+/* 166 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
-	var normalizeHeaderName = __webpack_require__(167);
+	var utils = __webpack_require__(167);
+	var normalizeHeaderName = __webpack_require__(168);
 
 	var PROTECTION_PREFIX = /^\)\]\}',?\n/;
 	var DEFAULT_CONTENT_TYPE = {
@@ -20160,7 +20283,7 @@
 
 
 /***/ },
-/* 166 */
+/* 167 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -20443,12 +20566,12 @@
 
 
 /***/ },
-/* 167 */
+/* 168 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	module.exports = function normalizeHeaderName(headers, normalizedName) {
 	  utils.forEach(headers, function processHeader(value, name) {
@@ -20461,7 +20584,7 @@
 
 
 /***/ },
-/* 168 */
+/* 169 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -20483,10 +20606,10 @@
 	        adapter = config.adapter;
 	      } else if (typeof XMLHttpRequest !== 'undefined') {
 	        // For browsers use XHR adapter
-	        adapter = __webpack_require__(169);
+	        adapter = __webpack_require__(170);
 	      } else if (typeof process !== 'undefined') {
 	        // For node use HTTP adapter
-	        adapter = __webpack_require__(169);
+	        adapter = __webpack_require__(170);
 	      }
 
 	      if (typeof adapter === 'function') {
@@ -20502,18 +20625,18 @@
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
 
 /***/ },
-/* 169 */
+/* 170 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
 
-	var utils = __webpack_require__(166);
-	var buildURL = __webpack_require__(170);
-	var parseHeaders = __webpack_require__(171);
-	var transformData = __webpack_require__(172);
-	var isURLSameOrigin = __webpack_require__(173);
-	var btoa = (typeof window !== 'undefined' && window.btoa) || __webpack_require__(174);
-	var settle = __webpack_require__(175);
+	var utils = __webpack_require__(167);
+	var buildURL = __webpack_require__(171);
+	var parseHeaders = __webpack_require__(172);
+	var transformData = __webpack_require__(173);
+	var isURLSameOrigin = __webpack_require__(174);
+	var btoa = (typeof window !== 'undefined' && window.btoa) || __webpack_require__(175);
+	var settle = __webpack_require__(176);
 
 	module.exports = function xhrAdapter(resolve, reject, config) {
 	  var requestData = config.data;
@@ -20610,7 +20733,7 @@
 	  // This is only done if running in a standard browser environment.
 	  // Specifically not if we're in a web worker, or react-native.
 	  if (utils.isStandardBrowserEnv()) {
-	    var cookies = __webpack_require__(176);
+	    var cookies = __webpack_require__(177);
 
 	    // Add xsrf header
 	    var xsrfValue = config.withCredentials || isURLSameOrigin(config.url) ?
@@ -20671,12 +20794,12 @@
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
 
 /***/ },
-/* 170 */
+/* 171 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	function encode(val) {
 	  return encodeURIComponent(val).
@@ -20745,12 +20868,12 @@
 
 
 /***/ },
-/* 171 */
+/* 172 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	/**
 	 * Parse headers into an object
@@ -20788,12 +20911,12 @@
 
 
 /***/ },
-/* 172 */
+/* 173 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	/**
 	 * Transform the data for a request or a response
@@ -20814,12 +20937,12 @@
 
 
 /***/ },
-/* 173 */
+/* 174 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	module.exports = (
 	  utils.isStandardBrowserEnv() ?
@@ -20888,7 +21011,7 @@
 
 
 /***/ },
-/* 174 */
+/* 175 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -20930,7 +21053,7 @@
 
 
 /***/ },
-/* 175 */
+/* 176 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -20954,12 +21077,12 @@
 
 
 /***/ },
-/* 176 */
+/* 177 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	module.exports = (
 	  utils.isStandardBrowserEnv() ?
@@ -21013,12 +21136,12 @@
 
 
 /***/ },
-/* 177 */
+/* 178 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var utils = __webpack_require__(166);
+	var utils = __webpack_require__(167);
 
 	function InterceptorManager() {
 	  this.handlers = [];
@@ -21071,7 +21194,7 @@
 
 
 /***/ },
-/* 178 */
+/* 179 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -21091,7 +21214,7 @@
 
 
 /***/ },
-/* 179 */
+/* 180 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -21109,7 +21232,7 @@
 
 
 /***/ },
-/* 180 */
+/* 181 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -21126,7 +21249,7 @@
 
 
 /***/ },
-/* 181 */
+/* 182 */
 /***/ function(module, exports) {
 
 	'use strict';
